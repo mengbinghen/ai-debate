@@ -1,0 +1,38 @@
+# Debate Rules Configuration
+
+debate_rules:
+  # Round configuration
+  rounds:
+    - name: "opening"
+      display_name: "开篇立论"
+      time_limit: 180  # seconds
+      word_limit: 800
+      description: "阐述己方观点，建立论证框架"
+
+    - name: "cross_examination"
+      display_name: "攻辩环节"
+      rounds: 2
+      time_per_question: 60  # seconds
+      description: "一方提问，一方回答"
+
+    - name: "free_debate"
+      display_name: "自由辩论"
+      rounds: 3
+      time_limit: 120  # seconds
+      description: "双方自由辩论，交替发言"
+
+    - name: "closing"
+      display_name: "总结陈词"
+      time_limit: 120  # seconds
+      word_limit: 500
+      description: "总结观点，反驳对方"
+
+  # Scoring criteria
+  scoring_criteria:
+    logic: 0.3      # Logic weight
+    evidence: 0.25   # Evidence weight
+    rebuttal: 0.25   # Rebuttal weight
+    expression: 0.2  # Expression weight
+
+  # Winning threshold
+  winning_threshold: 0.05  # Draw if score difference is less than this
