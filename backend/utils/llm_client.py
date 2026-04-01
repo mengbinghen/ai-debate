@@ -95,15 +95,18 @@ class LLMClient:
                 )
                 return response
             except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                # Only retry on server errors (5xx) and rate limiting (429)
+                is_retryable = status_code == 429 or (500 <= status_code < 600)
+                if not is_retryable or attempt == retry_count - 1:
+                    raise RuntimeError(
+                        f"LLM request failed after {attempt + 1} attempt(s) (HTTP {status_code}): {e}"
+                    ) from e
+                await asyncio.sleep(2**attempt)
+            except (httpx.RequestError, ValueError) as e:
                 if attempt == retry_count - 1:
                     raise RuntimeError(f"LLM request failed after {retry_count} attempts: {e}") from e
-                await asyncio.sleep(2**attempt)  # Exponential backoff
-            except Exception as e:
-                if attempt == retry_count - 1:
-                    raise RuntimeError(f"LLM request failed: {e}") from e
                 await asyncio.sleep(2**attempt)
-
-        raise RuntimeError("Unexpected error in LLM client")
 
     async def _make_request(
         self,
@@ -141,7 +144,15 @@ class LLMClient:
         response.raise_for_status()
 
         data = response.json()
-        return data["choices"][0]["message"]["content"]
+
+        # Validate response structure
+        if "choices" not in data or not data["choices"]:
+            raise ValueError(f"Unexpected API response: no choices returned. Response: {list(data.keys())}")
+        choice = data["choices"][0]
+        if "message" not in choice or "content" not in choice["message"]:
+            raise ValueError(f"Unexpected API response: no message content. Choice keys: {list(choice.keys())}")
+
+        return choice["message"]["content"]
 
     async def generate_json(
         self,

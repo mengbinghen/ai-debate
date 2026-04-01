@@ -18,21 +18,24 @@ async def initialize_debate(state: DebateState) -> Dict[str, Any]:
     model_config = state.get("model_config", {})
     llm_client = get_llm_client_for_role("moderator", model_config)
     moderator = ModeratorAgent(llm_client=llm_client)
-    intro = await moderator.introduce_debate(state["topic"])
+    try:
+        intro = await moderator.introduce_debate(state["topic"])
 
-    message = DebateMessage(
-        role=Role.MODERATOR,
-        content=intro,
-        round_type=RoundType.OPENING,
-    )
+        message = DebateMessage(
+            role=Role.MODERATOR,
+            content=intro,
+            round_type=RoundType.OPENING,
+        )
 
-    messages = state["debate_messages"] + [message]
+        messages = state["debate_messages"] + [message]
 
-    return {
-        "current_round": "opening",
-        "round_number": 1,
-        "debate_messages": messages,
-    }
+        return {
+            "current_round": "opening",
+            "round_number": 1,
+            "debate_messages": messages,
+        }
+    finally:
+        await moderator.close()
 
 
 async def opening_affirmative(state: DebateState) -> Dict[str, Any]:
@@ -47,22 +50,25 @@ async def opening_affirmative(state: DebateState) -> Dict[str, Any]:
     model_config = state.get("model_config", {})
     llm_client = get_llm_client_for_role("affirmative", model_config)
     debater = DebaterAgent(position="affirmative", llm_client=llm_client)
-    statement = await debater.make_opening_statement(state["topic"])
+    try:
+        statement = await debater.make_opening_statement(state["topic"])
 
-    message = DebateMessage(
-        role=Role.AFFIRMATIVE,
-        content=statement,
-        round_type=RoundType.OPENING,
-    )
+        message = DebateMessage(
+            role=Role.AFFIRMATIVE,
+            content=statement,
+            round_type=RoundType.OPENING,
+        )
 
-    opening_statements = state["opening_statements"].copy()
-    opening_statements["affirmative"] = statement
-    messages = state["debate_messages"] + [message]
+        opening_statements = state["opening_statements"].copy()
+        opening_statements["affirmative"] = statement
+        messages = state["debate_messages"] + [message]
 
-    return {
-        "opening_statements": opening_statements,
-        "debate_messages": messages,
-    }
+        return {
+            "opening_statements": opening_statements,
+            "debate_messages": messages,
+        }
+    finally:
+        await debater.close()
 
 
 async def opening_negative(state: DebateState) -> Dict[str, Any]:
@@ -77,22 +83,25 @@ async def opening_negative(state: DebateState) -> Dict[str, Any]:
     model_config = state.get("model_config", {})
     llm_client = get_llm_client_for_role("negative", model_config)
     debater = DebaterAgent(position="negative", llm_client=llm_client)
-    statement = await debater.make_opening_statement(state["topic"])
+    try:
+        statement = await debater.make_opening_statement(state["topic"])
 
-    message = DebateMessage(
-        role=Role.NEGATIVE,
-        content=statement,
-        round_type=RoundType.OPENING,
-    )
+        message = DebateMessage(
+            role=Role.NEGATIVE,
+            content=statement,
+            round_type=RoundType.OPENING,
+        )
 
-    opening_statements = state["opening_statements"].copy()
-    opening_statements["negative"] = statement
-    messages = state["debate_messages"] + [message]
+        opening_statements = state["opening_statements"].copy()
+        opening_statements["negative"] = statement
+        messages = state["debate_messages"] + [message]
 
-    return {
-        "opening_statements": opening_statements,
-        "debate_messages": messages,
-    }
+        return {
+            "opening_statements": opening_statements,
+            "debate_messages": messages,
+        }
+    finally:
+        await debater.close()
 
 
 async def score_opening(state: DebateState) -> Dict[str, Any]:
@@ -108,30 +117,33 @@ async def score_opening(state: DebateState) -> Dict[str, Any]:
     llm_client = get_llm_client_for_role("judge", model_config)
     judge = JudgeAgent(llm_client=llm_client)
 
-    scores = state["scores"].copy()
+    try:
+        scores = state["scores"].copy()
 
-    # Score affirmative opening
-    aff_score = await judge.score_round(
-        topic=state["topic"],
-        round_type=RoundType.OPENING,
-        position="affirmative",
-        content=state["opening_statements"]["affirmative"],
-    )
-    scores.append(aff_score)
+        # Score affirmative opening
+        aff_score = await judge.score_round(
+            topic=state["topic"],
+            round_type=RoundType.OPENING,
+            position="affirmative",
+            content=state["opening_statements"]["affirmative"],
+        )
+        scores.append(aff_score)
 
-    # Score negative opening
-    neg_score = await judge.score_round(
-        topic=state["topic"],
-        round_type=RoundType.OPENING,
-        position="negative",
-        content=state["opening_statements"]["negative"],
-    )
-    scores.append(neg_score)
+        # Score negative opening
+        neg_score = await judge.score_round(
+            topic=state["topic"],
+            round_type=RoundType.OPENING,
+            position="negative",
+            content=state["opening_statements"]["negative"],
+        )
+        scores.append(neg_score)
 
-    return {
-        "current_round": "cross_examination",
-        "scores": scores,
-    }
+        return {
+            "current_round": "cross_examination",
+            "scores": scores,
+        }
+    finally:
+        await judge.close()
 
 
 async def cross_examination_round_1(state: DebateState) -> Dict[str, Any]:
@@ -150,45 +162,49 @@ async def cross_examination_round_1(state: DebateState) -> Dict[str, Any]:
     aff_debater = DebaterAgent(position="affirmative", llm_client=aff_llm_client)
     neg_debater = DebaterAgent(position="negative", llm_client=neg_llm_client)
 
-    # Affirmative asks question based on negative's opening
-    question = await aff_debater.ask_cross_question(
-        topic=state["topic"],
-        opponent_statement=state["opening_statements"]["negative"],
-    )
+    try:
+        # Affirmative asks question based on negative's opening
+        question = await aff_debater.ask_cross_question(
+            topic=state["topic"],
+            opponent_statement=state["opening_statements"]["negative"],
+        )
 
-    # Negative answers
-    answer = await neg_debater.answer_cross_question(
-        topic=state["topic"],
-        question=question,
-        history=state["debate_messages"],
-    )
+        # Negative answers
+        answer = await neg_debater.answer_cross_question(
+            topic=state["topic"],
+            question=question,
+            history=state["debate_messages"],
+        )
 
-    question_msg = DebateMessage(
-        role=Role.AFFIRMATIVE,
-        content=question,
-        round_type=RoundType.CROSS_EXAMINATION,
-    )
+        question_msg = DebateMessage(
+            role=Role.AFFIRMATIVE,
+            content=question,
+            round_type=RoundType.CROSS_EXAMINATION,
+        )
 
-    answer_msg = DebateMessage(
-        role=Role.NEGATIVE,
-        content=answer,
-        round_type=RoundType.CROSS_EXAMINATION,
-    )
+        answer_msg = DebateMessage(
+            role=Role.NEGATIVE,
+            content=answer,
+            round_type=RoundType.CROSS_EXAMINATION,
+        )
 
-    cross_examinations = state["cross_examinations"].copy()
-    cross_examinations.append({
-        "round": 1,
-        "questioner": "affirmative",
-        "responder": "negative",
-        "question": question,
-        "answer": answer,
-    })
-    messages = state["debate_messages"] + [question_msg, answer_msg]
+        cross_examinations = state["cross_examinations"].copy()
+        cross_examinations.append({
+            "round": 1,
+            "questioner": "affirmative",
+            "responder": "negative",
+            "question": question,
+            "answer": answer,
+        })
+        messages = state["debate_messages"] + [question_msg, answer_msg]
 
-    return {
-        "cross_examinations": cross_examinations,
-        "debate_messages": messages,
-    }
+        return {
+            "cross_examinations": cross_examinations,
+            "debate_messages": messages,
+        }
+    finally:
+        await aff_debater.close()
+        await neg_debater.close()
 
 
 async def cross_examination_round_2(state: DebateState) -> Dict[str, Any]:
@@ -207,46 +223,50 @@ async def cross_examination_round_2(state: DebateState) -> Dict[str, Any]:
     aff_debater = DebaterAgent(position="affirmative", llm_client=aff_llm_client)
     neg_debater = DebaterAgent(position="negative", llm_client=neg_llm_client)
 
-    # Negative asks question based on affirmative's opening
-    question = await neg_debater.ask_cross_question(
-        topic=state["topic"],
-        opponent_statement=state["opening_statements"]["affirmative"],
-    )
+    try:
+        # Negative asks question based on affirmative's opening
+        question = await neg_debater.ask_cross_question(
+            topic=state["topic"],
+            opponent_statement=state["opening_statements"]["affirmative"],
+        )
 
-    # Affirmative answers
-    answer = await aff_debater.answer_cross_question(
-        topic=state["topic"],
-        question=question,
-        history=state["debate_messages"],
-    )
+        # Affirmative answers
+        answer = await aff_debater.answer_cross_question(
+            topic=state["topic"],
+            question=question,
+            history=state["debate_messages"],
+        )
 
-    question_msg = DebateMessage(
-        role=Role.NEGATIVE,
-        content=question,
-        round_type=RoundType.CROSS_EXAMINATION,
-    )
+        question_msg = DebateMessage(
+            role=Role.NEGATIVE,
+            content=question,
+            round_type=RoundType.CROSS_EXAMINATION,
+        )
 
-    answer_msg = DebateMessage(
-        role=Role.AFFIRMATIVE,
-        content=answer,
-        round_type=RoundType.CROSS_EXAMINATION,
-    )
+        answer_msg = DebateMessage(
+            role=Role.AFFIRMATIVE,
+            content=answer,
+            round_type=RoundType.CROSS_EXAMINATION,
+        )
 
-    cross_examinations = state["cross_examinations"].copy()
-    cross_examinations.append({
-        "round": 2,
-        "questioner": "negative",
-        "responder": "affirmative",
-        "question": question,
-        "answer": answer,
-    })
-    messages = state["debate_messages"] + [question_msg, answer_msg]
+        cross_examinations = state["cross_examinations"].copy()
+        cross_examinations.append({
+            "round": 2,
+            "questioner": "negative",
+            "responder": "affirmative",
+            "question": question,
+            "answer": answer,
+        })
+        messages = state["debate_messages"] + [question_msg, answer_msg]
 
-    return {
-        "cross_examinations": cross_examinations,
-        "debate_messages": messages,
-        "current_round": "free_debate",
-    }
+        return {
+            "cross_examinations": cross_examinations,
+            "debate_messages": messages,
+            "current_round": "free_debate",
+        }
+    finally:
+        await aff_debater.close()
+        await neg_debater.close()
 
 
 async def free_debate_round(state: DebateState) -> Dict[str, Any]:
@@ -265,36 +285,40 @@ async def free_debate_round(state: DebateState) -> Dict[str, Any]:
     aff_debater = DebaterAgent(position="affirmative", llm_client=aff_llm_client)
     neg_debater = DebaterAgent(position="negative", llm_client=neg_llm_client)
 
-    current_round = state["free_debate_round"] + 1
+    try:
+        current_round = state["free_debate_round"] + 1
 
-    # Affirmative speaks first in free debate
-    aff_response = await aff_debater.free_debate(
-        topic=state["topic"],
-        history=state["debate_messages"],
-    )
-    aff_msg = DebateMessage(
-        role=Role.AFFIRMATIVE,
-        content=aff_response,
-        round_type=RoundType.FREE_DEBATE,
-    )
+        # Affirmative speaks first in free debate
+        aff_response = await aff_debater.free_debate(
+            topic=state["topic"],
+            history=state["debate_messages"],
+        )
+        aff_msg = DebateMessage(
+            role=Role.AFFIRMATIVE,
+            content=aff_response,
+            round_type=RoundType.FREE_DEBATE,
+        )
 
-    # Negative responds
-    neg_response = await neg_debater.free_debate(
-        topic=state["topic"],
-        history=state["debate_messages"] + [aff_msg],
-    )
-    neg_msg = DebateMessage(
-        role=Role.NEGATIVE,
-        content=neg_response,
-        round_type=RoundType.FREE_DEBATE,
-    )
+        # Negative responds
+        neg_response = await neg_debater.free_debate(
+            topic=state["topic"],
+            history=state["debate_messages"] + [aff_msg],
+        )
+        neg_msg = DebateMessage(
+            role=Role.NEGATIVE,
+            content=neg_response,
+            round_type=RoundType.FREE_DEBATE,
+        )
 
-    messages = state["debate_messages"] + [aff_msg, neg_msg]
+        messages = state["debate_messages"] + [aff_msg, neg_msg]
 
-    return {
-        "free_debate_round": current_round,
-        "debate_messages": messages,
-    }
+        return {
+            "free_debate_round": current_round,
+            "debate_messages": messages,
+        }
+    finally:
+        await aff_debater.close()
+        await neg_debater.close()
 
 
 async def closing_affirmative(state: DebateState) -> Dict[str, Any]:
@@ -309,25 +333,28 @@ async def closing_affirmative(state: DebateState) -> Dict[str, Any]:
     model_config = state.get("model_config", {})
     llm_client = get_llm_client_for_role("affirmative", model_config)
     debater = DebaterAgent(position="affirmative", llm_client=llm_client)
-    statement = await debater.make_closing_statement(
-        topic=state["topic"],
-        history=state["debate_messages"],
-    )
+    try:
+        statement = await debater.make_closing_statement(
+            topic=state["topic"],
+            history=state["debate_messages"],
+        )
 
-    message = DebateMessage(
-        role=Role.AFFIRMATIVE,
-        content=statement,
-        round_type=RoundType.CLOSING,
-    )
+        message = DebateMessage(
+            role=Role.AFFIRMATIVE,
+            content=statement,
+            round_type=RoundType.CLOSING,
+        )
 
-    closing_statements = state["closing_statements"].copy()
-    closing_statements["affirmative"] = statement
-    messages = state["debate_messages"] + [message]
+        closing_statements = state["closing_statements"].copy()
+        closing_statements["affirmative"] = statement
+        messages = state["debate_messages"] + [message]
 
-    return {
-        "closing_statements": closing_statements,
-        "debate_messages": messages,
-    }
+        return {
+            "closing_statements": closing_statements,
+            "debate_messages": messages,
+        }
+    finally:
+        await debater.close()
 
 
 async def closing_negative(state: DebateState) -> Dict[str, Any]:
@@ -342,25 +369,28 @@ async def closing_negative(state: DebateState) -> Dict[str, Any]:
     model_config = state.get("model_config", {})
     llm_client = get_llm_client_for_role("negative", model_config)
     debater = DebaterAgent(position="negative", llm_client=llm_client)
-    statement = await debater.make_closing_statement(
-        topic=state["topic"],
-        history=state["debate_messages"],
-    )
+    try:
+        statement = await debater.make_closing_statement(
+            topic=state["topic"],
+            history=state["debate_messages"],
+        )
 
-    message = DebateMessage(
-        role=Role.NEGATIVE,
-        content=statement,
-        round_type=RoundType.CLOSING,
-    )
+        message = DebateMessage(
+            role=Role.NEGATIVE,
+            content=statement,
+            round_type=RoundType.CLOSING,
+        )
 
-    closing_statements = state["closing_statements"].copy()
-    closing_statements["negative"] = statement
-    messages = state["debate_messages"] + [message]
+        closing_statements = state["closing_statements"].copy()
+        closing_statements["negative"] = statement
+        messages = state["debate_messages"] + [message]
 
-    return {
-        "closing_statements": closing_statements,
-        "debate_messages": messages,
-    }
+        return {
+            "closing_statements": closing_statements,
+            "debate_messages": messages,
+        }
+    finally:
+        await debater.close()
 
 
 async def final_judgment(state: DebateState) -> Dict[str, Any]:
@@ -376,17 +406,160 @@ async def final_judgment(state: DebateState) -> Dict[str, Any]:
     llm_client = get_llm_client_for_role("judge", model_config)
     judge = JudgeAgent(llm_client=llm_client)
 
-    verdict = await judge.final_verdict(
-        topic=state["topic"],
-        scores=state["scores"],
-        history=state["debate_messages"],
-    )
+    try:
+        verdict = await judge.final_verdict(
+            topic=state["topic"],
+            scores=state["scores"],
+            history=state["debate_messages"],
+        )
 
-    return {
-        "final_verdict": verdict,
-        "debate_finished": True,
-        "current_round": "finished",
-    }
+        return {
+            "final_verdict": verdict,
+            "debate_finished": True,
+            "current_round": "finished",
+        }
+    finally:
+        await judge.close()
+
+
+async def score_cross_examination(state: DebateState) -> Dict[str, Any]:
+    """Score the cross-examination rounds.
+
+    Args:
+        state: Current debate state.
+
+    Returns:
+        Updated state with cross-examination scores.
+    """
+    model_config = state.get("model_config", {})
+    llm_client = get_llm_client_for_role("judge", model_config)
+    judge = JudgeAgent(llm_client=llm_client)
+
+    try:
+        scores = state["scores"].copy()
+        cross_exams = state.get("cross_examinations", [])
+
+        # Build content for each side from their Q&A contributions
+        aff_parts = []
+        neg_parts = []
+        for ce in cross_exams:
+            if ce["questioner"] == "affirmative":
+                aff_parts.append(f"提问：{ce['question']}")
+                neg_parts.append(f"回答：{ce['answer']}")
+            else:
+                neg_parts.append(f"提问：{ce['question']}")
+                aff_parts.append(f"回答：{ce['answer']}")
+
+        aff_content = "\n\n".join(aff_parts)
+        neg_content = "\n\n".join(neg_parts)
+
+        aff_score = await judge.score_round(
+            topic=state["topic"],
+            round_type=RoundType.CROSS_EXAMINATION,
+            position="affirmative",
+            content=aff_content,
+        )
+        scores.append(aff_score)
+
+        neg_score = await judge.score_round(
+            topic=state["topic"],
+            round_type=RoundType.CROSS_EXAMINATION,
+            position="negative",
+            content=neg_content,
+        )
+        scores.append(neg_score)
+
+        return {"scores": scores}
+    finally:
+        await judge.close()
+
+
+async def score_free_debate(state: DebateState) -> Dict[str, Any]:
+    """Score the free debate rounds.
+
+    Args:
+        state: Current debate state.
+
+    Returns:
+        Updated state with free debate scores.
+    """
+    model_config = state.get("model_config", {})
+    llm_client = get_llm_client_for_role("judge", model_config)
+    judge = JudgeAgent(llm_client=llm_client)
+
+    try:
+        scores = state["scores"].copy()
+
+        # Collect free debate messages for each side
+        aff_parts = []
+        neg_parts = []
+        for msg in state["debate_messages"]:
+            if msg.round_type == RoundType.FREE_DEBATE:
+                if msg.role == Role.AFFIRMATIVE:
+                    aff_parts.append(msg.content)
+                elif msg.role == Role.NEGATIVE:
+                    neg_parts.append(msg.content)
+
+        aff_content = "\n\n".join(aff_parts)
+        neg_content = "\n\n".join(neg_parts)
+
+        aff_score = await judge.score_round(
+            topic=state["topic"],
+            round_type=RoundType.FREE_DEBATE,
+            position="affirmative",
+            content=aff_content,
+        )
+        scores.append(aff_score)
+
+        neg_score = await judge.score_round(
+            topic=state["topic"],
+            round_type=RoundType.FREE_DEBATE,
+            position="negative",
+            content=neg_content,
+        )
+        scores.append(neg_score)
+
+        return {"scores": scores}
+    finally:
+        await judge.close()
+
+
+async def score_closing(state: DebateState) -> Dict[str, Any]:
+    """Score the closing statements.
+
+    Args:
+        state: Current debate state.
+
+    Returns:
+        Updated state with closing scores.
+    """
+    model_config = state.get("model_config", {})
+    llm_client = get_llm_client_for_role("judge", model_config)
+    judge = JudgeAgent(llm_client=llm_client)
+
+    try:
+        scores = state["scores"].copy()
+        closing = state.get("closing_statements", {})
+
+        aff_score = await judge.score_round(
+            topic=state["topic"],
+            round_type=RoundType.CLOSING,
+            position="affirmative",
+            content=closing.get("affirmative", ""),
+        )
+        scores.append(aff_score)
+
+        neg_score = await judge.score_round(
+            topic=state["topic"],
+            round_type=RoundType.CLOSING,
+            position="negative",
+            content=closing.get("negative", ""),
+        )
+        scores.append(neg_score)
+
+        return {"scores": scores}
+    finally:
+        await judge.close()
 
 
 # Conditional edge functions

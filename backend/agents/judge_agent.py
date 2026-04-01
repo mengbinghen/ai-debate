@@ -81,24 +81,51 @@ class JudgeAgent(BaseAgent):
 
         response = await self.generate_json_with_prompt(prompt=prompt)
 
-        # Calculate weighted total
+        # Validate and clamp score values to 0-100 range
+        logic = self._validate_score(response.get("logic", 0), "logic")
+        evidence = self._validate_score(response.get("evidence", 0), "evidence")
+        rebuttal = self._validate_score(response.get("rebuttal", 0), "rebuttal")
+        expression = self._validate_score(response.get("expression", 0), "expression")
+
+        # Calculate weighted total from validated scores
         total = (
-            response.get("logic", 0) * self.weights["logic"]
-            + response.get("evidence", 0) * self.weights["evidence"]
-            + response.get("rebuttal", 0) * self.weights["rebuttal"]
-            + response.get("expression", 0) * self.weights["expression"]
+            logic * self.weights["logic"]
+            + evidence * self.weights["evidence"]
+            + rebuttal * self.weights["rebuttal"]
+            + expression * self.weights["expression"]
         )
 
         return DebateScore(
             round_type=round_type,
             position=position,
-            logic=response.get("logic", 0),
-            evidence=response.get("evidence", 0),
-            rebuttal=response.get("rebuttal", 0),
-            expression=response.get("expression", 0),
+            logic=logic,
+            evidence=evidence,
+            rebuttal=rebuttal,
+            expression=expression,
             total=total,
-            comment=response.get("comment", ""),
+            comment=str(response.get("comment", "")),
         )
+
+    def _validate_score(self, value: Any, name: str) -> float:
+        """Validate and clamp a score value to 0-100 range.
+
+        Args:
+            value: The raw score value from LLM response.
+            name: The score dimension name for error messages.
+
+        Returns:
+            A valid float score clamped to 0-100.
+
+        Raises:
+            ValueError: If the value cannot be converted to float.
+        """
+        try:
+            score = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Invalid {name} score: expected number, got {type(value).__name__}: {value}"
+            )
+        return max(0.0, min(100.0, score))
 
     async def final_verdict(
         self,
@@ -140,9 +167,9 @@ class JudgeAgent(BaseAgent):
 
         return DebateVerdict(
             winner=response.get("winner", "draw"),
-            affirmative_total=response.get("affirmative_total", affirmative_total),
-            negative_total=response.get("negative_total", negative_total),
-            comment=response.get("comment", ""),
+            affirmative_total=affirmative_total,
+            negative_total=negative_total,
+            comment=str(response.get("comment", "")),
             scores=scores,
         )
 
@@ -172,11 +199,11 @@ class JudgeAgent(BaseAgent):
             context: Current debate context.
 
         Returns:
-            The generated response (typically a JSON string with scores).
+            The generated response as a string.
         """
-        # This is a placeholder; the judge is typically called via specific methods
-        return await self.final_verdict(
+        verdict = await self.final_verdict(
             topic=context.get("topic", ""),
             scores=context.get("scores", []),
             history=context.get("history", []),
         )
+        return verdict.comment
