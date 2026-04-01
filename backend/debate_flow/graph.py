@@ -13,6 +13,9 @@ from backend.debate_flow.nodes import (
     initialize_debate,
     opening_affirmative,
     opening_negative,
+    score_closing,
+    score_cross_examination,
+    score_free_debate,
     score_opening,
     should_continue_free_debate,
 )
@@ -38,21 +41,25 @@ def build_debate_graph(max_free_debate_rounds: int = 3) -> StateGraph:
     graph.add_node("score_opening", score_opening)
     graph.add_node("cross_examination_1", cross_examination_round_1)
     graph.add_node("cross_examination_2", cross_examination_round_2)
+    graph.add_node("score_cross_examination", score_cross_examination)
     graph.add_node("free_debate", free_debate_round)
+    graph.add_node("score_free_debate", score_free_debate)
     graph.add_node("closing_affirmative", closing_affirmative)
     graph.add_node("closing_negative", closing_negative)
+    graph.add_node("score_closing", score_closing)
     graph.add_node("final_judgment", final_judgment)
 
     # Set entry point
     graph.set_entry_point("initialize")
 
-    # Define edges (linear flow)
+    # Define edges
     graph.add_edge("initialize", "opening_affirmative")
     graph.add_edge("opening_affirmative", "opening_negative")
     graph.add_edge("opening_negative", "score_opening")
     graph.add_edge("score_opening", "cross_examination_1")
     graph.add_edge("cross_examination_1", "cross_examination_2")
-    graph.add_edge("cross_examination_2", "free_debate")
+    graph.add_edge("cross_examination_2", "score_cross_examination")
+    graph.add_edge("score_cross_examination", "free_debate")
 
     # Conditional edge for free debate (can loop)
     graph.add_conditional_edges(
@@ -60,12 +67,14 @@ def build_debate_graph(max_free_debate_rounds: int = 3) -> StateGraph:
         should_continue_free_debate,
         {
             "continue": "free_debate",
-            "end": "closing_affirmative",
+            "end": "score_free_debate",
         },
     )
 
+    graph.add_edge("score_free_debate", "closing_affirmative")
     graph.add_edge("closing_affirmative", "closing_negative")
-    graph.add_edge("closing_negative", "final_judgment")
+    graph.add_edge("closing_negative", "score_closing")
+    graph.add_edge("score_closing", "final_judgment")
     graph.add_edge("final_judgment", END)
 
     return graph.compile()

@@ -45,6 +45,20 @@ def init_session_state() -> None:
         settings.DEEPSEEK_API_KEY = env_api_key
 
 
+def _run_async(coro):
+    """Run async coroutine safely, handling existing event loops in Streamlit."""
+    try:
+        asyncio.get_running_loop()
+        # There's already a running event loop - run in a separate thread
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(asyncio.run, coro)
+            return future.result()
+    except RuntimeError:
+        # No running loop - safe to use asyncio.run directly
+        return asyncio.run(coro)
+
+
 def get_role_emoji(role: str) -> str:
     """Get emoji for a role.
 
@@ -296,6 +310,9 @@ def render_debate_page() -> None:
                         initialize_debate,
                         opening_affirmative,
                         opening_negative,
+                        score_closing,
+                        score_cross_examination,
+                        score_free_debate,
                         score_opening,
                         should_continue_free_debate,
                     )
@@ -358,6 +375,10 @@ def render_debate_page() -> None:
                     for msg in state.get("debate_messages", [])[len(messages_list):]:
                         display_message(msg)
 
+                    # Score cross-examination
+                    status_placeholder.info("🔄 评分（攻辩环节）...")
+                    state = {**state, **await score_cross_examination(state)}
+
                     # Free debate rounds
                     max_rounds = state.get("max_free_debate_rounds", 3)
                     for i in range(max_rounds):
@@ -370,6 +391,10 @@ def render_debate_page() -> None:
                         if should_continue_free_debate(state) == "end":
                             break
 
+                    # Score free debate
+                    status_placeholder.info("🔄 评分（自由辩论）...")
+                    state = {**state, **await score_free_debate(state)}
+
                     # Closing affirmative
                     status_placeholder.info("🔄 总结陈词（正方）...")
                     state = {**state, **await closing_affirmative(state)}
@@ -381,6 +406,10 @@ def render_debate_page() -> None:
                     state = {**state, **await closing_negative(state)}
                     for msg in state.get("debate_messages", [])[len(messages_list):]:
                         display_message(msg)
+
+                    # Score closing
+                    status_placeholder.info("🔄 评分（总结陈词）...")
+                    state = {**state, **await score_closing(state)}
 
                     # Final judgment
                     status_placeholder.info("🔄 最终判决...")
@@ -399,8 +428,8 @@ def render_debate_page() -> None:
                     ss.debate_data["result"] = result
                     status_placeholder.success("✅ 辩论完成！")
 
-                # Run the async function
-                asyncio.run(run_manual_streaming_debate())
+                # Run the async function safely
+                _run_async(run_manual_streaming_debate())
 
                 # Auto-redirect to results after a short delay
                 import time
